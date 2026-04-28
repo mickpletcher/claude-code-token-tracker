@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Token Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0c0e12;--surface:#131620;--surface2:#1a1e2e;--border:#252a3d;
+    --accent:#e8a45a;--accent2:#6e9ef5;--accent3:#7dd6a8;--danger:#e8605a;
+    --muted:#4a5068;--text:#d4d8e8;--text-dim:#7a8099;
+    --mono:'JetBrains Mono',monospace;--sans:'Syne',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh;padding:24px;}
+  body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:0;}
+  .wrap{max-width:1100px;margin:0 auto;position:relative;z-index:1;}
+  header{display:flex;align-items:baseline;gap:16px;margin-bottom:32px;border-bottom:1px solid var(--border);padding-bottom:20px;}
+  header h1{font-family:var(--sans);font-size:22px;font-weight:800;letter-spacing:-.5px;color:#fff;}
+  header h1 span{color:var(--accent);}
+  .version{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+  .header-right{margin-left:auto;display:flex;gap:10px;align-items:center;}
+  .status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;border:1px solid var(--border);}
+  .status-pill.live{border-color:var(--accent3);color:var(--accent3);}
+  .status-pill.error{border-color:var(--danger);color:var(--danger);}
+  .status-pill.loading{border-color:var(--muted);color:var(--muted);}
+  .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .dot.pulse{animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;position:relative;overflow:hidden;}
+  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+  .stat-card.orange::before{background:var(--accent);}
+  .stat-card.blue::before{background:var(--accent2);}
+  .stat-card.green::before{background:var(--accent3);}
+  .stat-card.red::before{background:var(--danger);}
+  .stat-card.purple::before{background:#c47ad4;}
+  .stat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;}
+  .stat-value{font-size:22px;font-weight:700;color:#fff;line-height:1;margin-bottom:4px;}
+  .stat-sub{font-size:11px;color:var(--text-dim);}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:16px;}
+  .panel-header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);}
+  .panel-title{font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.5px;color:#fff;}
+  .panel-body{padding:18px;}
+  .cost-breakdown{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .cost-item{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;}
+  .cost-item-label{font-size:10px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;}
+  .cost-item-rate{font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .cost-item-val{font-size:16px;font-weight:700;color:var(--accent3);}
+  .table-wrap{overflow-x:auto;max-height:480px;overflow-y:auto;}
+  .table-wrap::-webkit-scrollbar{width:4px;height:4px;}
+  .table-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .log-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .log-table th{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:400;position:sticky;top:0;background:var(--surface);z-index:2;}
+  .log-table td{padding:10px 12px;border-bottom:1px solid #1a1e2e;vertical-align:middle;}
+  .log-table tr:last-child td{border-bottom:none;}
+  .log-table tr:hover td{background:var(--surface2);}
+  .num{text-align:right;}
+  .cost-cell{text-align:right;color:var(--accent3);font-weight:500;}
+  .date-cell{color:var(--text-dim);font-size:11px;white-space:nowrap;}
+  .proj-cell{color:var(--accent2);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .empty-state{text-align:center;padding:48px;color:var(--muted);}
+  .empty-state .icon{font-size:32px;margin-bottom:12px;opacity:.4;}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:4px;font-family:var(--mono);font-size:12px;font-weight:500;cursor:pointer;border:none;transition:opacity .15s,transform .1s;letter-spacing:.5px;white-space:nowrap;}
+  .btn:active{transform:scale(.97);}
+  .btn:hover{opacity:.88;}
+  .btn-primary{background:var(--accent);color:#0c0e12;}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--border);}
+  .btn-sm{padding:5px 10px;font-size:11px;}
+  .server-notice{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:16px;font-size:12px;line-height:1.9;color:var(--text-dim);}
+  .server-notice code{background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:3px;color:var(--accent);font-size:12px;}
+  #toast{position:fixed;bottom:24px;right:24px;background:var(--accent3);color:#0c0e12;padding:10px 16px;border-radius:4px;font-size:12px;font-weight:600;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;z-index:999;pointer-events:none;}
+  #toast.show{opacity:1;transform:translateY(0);}
+  .last-updated{font-size:10px;color:var(--muted);margin-left:auto;}
+  @media(max-width:900px){.stats-grid{grid-template-columns:repeat(3,1fr);}.cost-breakdown{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Claude Code <span>//</span> Token Tracker</h1></div>
+    <span class="version">v2.0 · live</span>
+    <div class="header-right">
+      <div class="status-pill loading" id="status-pill">
+        <div class="dot"></div><span id="status-text">connecting</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="fetchData()">↺ Refresh</button>
+    </div>
+  </header>
+
+  <div class="server-notice" id="server-notice" style="display:none">
+    ⚠ Cannot reach the local data server. Place both files in the same folder, then run:<br>
+    <code>python cc_token_server.py</code><br>
+    Then refresh this page. The server reads <code>~/.claude/projects/</code> JSONL files and exposes them at <code>localhost:7823</code>.
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card orange"><div class="stat-label">Total Tokens</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub">all sessions</div></div>
+    <div class="stat-card blue"><div class="stat-label">Input</div><div class="stat-value" id="stat-input">—</div><div class="stat-sub">prompts + context</div></div>
+    <div class="stat-card green"><div class="stat-label">Output</div><div class="stat-value" id="stat-output">—</div><div class="stat-sub">generated</div></div>
+    <div class="stat-card purple"><div class="stat-label">Cache Tokens</div><div class="stat-value" id="stat-cache">—</div><div class="stat-sub">write + read</div></div>
+    <div class="stat-card red"><div class="stat-label">Est. Cost</div><div class="stat-value" id="stat-cost">—</div><div class="stat-sub" id="stat-sessions">— sessions</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Cost Breakdown</div>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;">Claude Sonnet 4 · per million tokens</span>
+    </div>
+    <div class="panel-body">
+      <div class="cost-breakdown">
+        <div class="cost-item"><div class="cost-item-label">Input</div><div class="cost-item-rate">$3.00 / MTok</div><div class="cost-item-val" id="cost-input">$0.00</div></div>
+        <div class="cost-item"><div class="cost-item-label">Output</div><div class="cost-item-rate">$15.00 / MTok</div><div class="cost-item-val" id="cost-output">$0.00</div></div>
+        <div class="cost-item"><div class="cost-item-label">Cache Write</div><div class="cost-item-rate">$3.75 / MTok</div><div class="cost-item-val" id="cost-cw">$0.00</div></div>
+        <div class="cost-item"><div class="cost-item-label">Cache Read</div><div class="cost-item-rate">$0.30 / MTok</div><div class="cost-item-val" id="cost-cr">$0.00</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Sessions</div>
+      <span id="session-count" style="font-size:11px;color:var(--text-dim)">—</span>
+      <span class="last-updated" id="last-updated"></span>
+    </div>
+    <div class="table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th><th>Project</th>
+            <th class="num">Input</th><th class="num">Output</th>
+            <th class="num">Cache W</th><th class="num">Cache R</th>
+            <th class="num">Total</th><th class="num">Msgs</th><th class="num">Cost</th>
+          </tr>
+        </thead>
+        <tbody id="log-body">
+          <tr><td colspan="9"><div class="empty-state"><div class="icon">◈</div><div>Connecting…</div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:24px;font-size:10px;color:var(--muted);letter-spacing:1.5px;">
+    Auto-refreshes every 30s · Reads ~/.claude/projects/ · No data leaves your machine
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+  const API='http://localhost:7823/api/usage';
+  const RATES={input:3/1e6,output:15/1e6,cacheWrite:3.75/1e6,cacheRead:.3/1e6};
+  let sessions=[];
+  const fmt=n=>Number(n||0).toLocaleString();
+  const fmtC=n=>'$'+Number(n).toFixed(4);
+  const fmtCS=n=>'$'+Number(n).toFixed(2);
+  const cost=s=>(s.input||0)*RATES.input+(s.output||0)*RATES.output+(s.cacheWrite||0)*RATES.cacheWrite+(s.cacheRead||0)*RATES.cacheRead;
+
+  function setStatus(state,text){
+    const pill=document.getElementById('status-pill');
+    const dot=pill.querySelector('.dot');
+    pill.className='status-pill '+state;
+    document.getElementById('status-text').textContent=text;
+    dot.className='dot'+(state==='live'?' pulse':'');
+  }
+  function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200);}
+
+  async function fetchData(){
+    setStatus('loading','fetching…');
+    try{
+      const res=await fetch(API,{cache:'no-store'});
+      if(!res.ok)throw new Error();
+      const data=await res.json();
+      sessions=data.sessions||[];
+      document.getElementById('server-notice').style.display='none';
+      setStatus('live','live');
+      document.getElementById('last-updated').textContent='updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      render();
+    }catch(e){
+      setStatus('error','server offline');
+      document.getElementById('server-notice').style.display='block';
+    }
+  }
+
+  function render(){
+    let tI=0,tO=0,tCW=0,tCR=0,tCost=0;
+    sessions.forEach(s=>{tI+=s.input||0;tO+=s.output||0;tCW+=s.cacheWrite||0;tCR+=s.cacheRead||0;tCost+=cost(s);});
+    document.getElementById('stat-total').textContent=fmt(tI+tO+tCW+tCR);
+    document.getElementById('stat-input').textContent=fmt(tI);
+    document.getElementById('stat-output').textContent=fmt(tO);
+    document.getElementById('stat-cache').textContent=fmt(tCW+tCR);
+    document.getElementById('stat-cost').textContent=fmtCS(tCost);
+    document.getElementById('stat-sessions').textContent=sessions.length+' sessions';
+    document.getElementById('session-count').textContent=sessions.length+' entries';
+    document.getElementById('cost-input').textContent=fmtCS(tI*RATES.input);
+    document.getElementById('cost-output').textContent=fmtCS(tO*RATES.output);
+    document.getElementById('cost-cw').textContent=fmtCS(tCW*RATES.cacheWrite);
+    document.getElementById('cost-cr').textContent=fmtCS(tCR*RATES.cacheRead);
+    const tbody=document.getElementById('log-body');
+    if(!sessions.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><div class="icon">◈</div><div>No sessions found in ~/.claude/projects/</div></div></td></tr>';return;}
+    tbody.innerHTML=sessions.map(s=>{
+      const total=(s.input||0)+(s.output||0)+(s.cacheWrite||0)+(s.cacheRead||0);
+      const c=cost(s);
+      const ts=s.ts?new Date(s.ts).toLocaleString():'—';
+      return`<tr>
+        <td class="date-cell">${ts}</td>
+        <td class="proj-cell" title="${s.project}">${s.project}</td>
+        <td class="num">${fmt(s.input)}</td><td class="num">${fmt(s.output)}</td>
+        <td class="num">${fmt(s.cacheWrite)}</td><td class="num">${fmt(s.cacheRead)}</td>
+        <td class="num" style="color:var(--text)">${fmt(total)}</td>
+        <td class="num" style="color:var(--text-dim)">${s.messages}</td>
+        <td class="cost-cell">${fmtC(c)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function exportCSV(){
+    if(!sessions.length){toast('No data.');return;}
+    const h='Timestamp,Project,Input,Output,Cache Write,Cache Read,Total,Messages,Cost';
+    const rows=sessions.map(s=>[new Date(s.ts).toLocaleString(),'"'+(s.project||'').replace(/"/g,'""')+'"',s.input||0,s.output||0,s.cacheWrite||0,s.cacheRead||0,(s.input||0)+(s.output||0)+(s.cacheWrite||0)+(s.cacheRead||0),s.messages,cost(s).toFixed(6)].join(','));
+    const blob=new Blob([[h,...rows].join('\n')],{type:'text/csv'});
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'cc-tokens.csv'});
+    a.click();toast('CSV exported.');
+  }
+
+  fetchData();
+  setInterval(fetchData,30000);
+</script>
+</body>
+</html>
